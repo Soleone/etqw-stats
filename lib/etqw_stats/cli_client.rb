@@ -29,6 +29,9 @@ and vehicles you used, etc..
   5. Compare the second last downloaded session with the session before
      etqw_stats session 2
 	
+  6. Downloads the current stats for the current user and saves to /history
+     etqw_stats update
+     
 END_OF_HELP
 
 	# Command Line Client for basic usage
@@ -41,38 +44,33 @@ END_OF_HELP
 		
 		def start
 			command = @args[0]
-			case @args.size
-			when 0
-				puts CONSOLE_HELP
-			when 1..4
-				target_dir = @args[2] || 'history'
-				if (@args[0].downcase == 'show')
-					stats = ETQWStats.get(@args[1])
-				elsif (@args[0].downcase == 'download')
-					xml = ETQWStats.download_for_user(@args[1])
-					new_file_name = File.expand_path(File.join(target_dir, filename_for_stats(xml)))
-					File.open(new_file_name, 'w') do |file|
-						file.write(xml)
-					end
-					puts "Finished downloading of profile for player #{@args[1]} to #{new_file_name}"
+			target_dir = @args[2] || 'history'
+			if @args.empty?
+				puts CONSOLE_HELP 
+			elsif @args[0].downcase == 'show'
+				stats = ETQWStats.get(@args[1])
+			elsif @args[0].downcase == 'update'
+				username = name_from_history_file(history_file_newest(target_dir))
+				update(username, target_dir)
+			elsif @args[0].downcase == 'download'
+				update(@args[0], target_dir)
+			else
+				# compare actual stats from web to last downloaded one
+				if (command.downcase == "lastsession")
+					older_file = history_file_newest(target_dir)
+					newer_file = @args[1] || name_from_history_file(older_file)
+				# compare two neighbouring downloaded stats sessions
+				elsif (command.downcase == "session")
+					count = @args[1].to_i || 1
+					newer_file = history_file_at(target_dir, count)
+					older_file = history_file_at(target_dir, 1 + count)
+					puts "Comparing these two statistics:\n \"#{older_file}\"\n -> \n\"#{newer_file}\""
+				elsif (command.downcase == 'compare')
+					newer_file, older_file = @args[1], target_dir
 				else
-					# compare actual stats from web to last downloaded one
-					if (command.downcase == "lastsession")
-						older_file = history_file_newest(target_dir)
-						newer_file = @args[1] || name_from_history_file(older_file)
-					# compare two neighbouring downloaded stats sessions
-					elsif (command.downcase == "session")
-						count = @args[1].to_i || 1
-						newer_file = history_file_at(target_dir, count)
-						older_file = history_file_at(target_dir, 1 + count)
-						puts "Comparing these two statistics:\n \"#{older_file}\"\n -> \n\"#{newer_file}\""
-					elsif (command.downcase == 'compare')
-						newer_file, older_file = @args[1], target_dir
-					else
-						return "Wrong command issued.\nTry etqw_stats download USERNAME"
-					end
-					stats = ETQWStats.make_diff(newer_file, older_file)
+					return "Wrong command issued.\nTry etqw_stats download USERNAME"
 				end
+				stats = ETQWStats.make_diff(newer_file, older_file)
 			end
 			puts stats.to_s
 		end
@@ -99,6 +97,15 @@ END_OF_HELP
 		def name_from_history_file(filename)
 			/-\d\d_\d\d-([^\.]+)\.xml$/ =~ filename
 			return $1
+		end
+		
+		def update(user, target_dir)
+			xml = ETQWStats.download_for_user(user)
+			new_file_name = File.expand_path(File.join(target_dir, filename_for_stats(xml)))
+			File.open(new_file_name, 'w') do |file|
+				file.write(xml)
+			end
+			puts "Finished downloading of profile for player #{user} to #{new_file_name}"
 		end
 	end
 end
